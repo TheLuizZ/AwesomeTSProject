@@ -1,0 +1,628 @@
+import React, { useCallback, useContext, useEffect, useState } from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+
+} from 'react-native';
+import { Portal } from 'react-native-paper';
+import { t } from 'react-native-tailwindcss';
+import { useFocusEffect } from '@react-navigation/native';
+import { selectContact } from 'react-native-select-contact';
+import dayjs from 'dayjs';
+
+// Apis
+import { sendMoneyCheckPhoneNumber } from '../../commons/apiInterface/sendMoneyCheckPhoneNumber';
+
+// Hooks
+import AuthContext from '../../hooks/context/authContext';
+import FontSizeContext from '../../hooks/context/fontSizeContext';
+import LanguageContext from '../../hooks/context/languageContext';
+import { hookBalancePoint } from '../../hooks/auth';
+import {
+  filterPhoneNumbers,
+  formatterCURRENCY,
+  getFullNameArray,
+  getFullNameFormat,
+} from '../../core/utils';
+import { useForm } from '../../hooks/useForm';
+
+// Icons
+import AddContactIcon from '../../images/AddContactIcon.svg';
+
+// Components
+import DialogContactBook from '../../components/DialogContactBook';
+import ButtonCustom from '../../components/ButtonCustom';
+import DialogSendMoney from '../../components/DialogSendMoney';
+import DialogSuccessfully from '../../components/DialogSuccessfully';
+import FavoriteCustom from '../../components/FavoriteCustom';
+import Loader from '../../components/Loader';
+import HeaderMenu from '../../components/HeaderMenu';
+import SwitchCustom from '../../components/SwtichCustom';
+import TabNavigatorCustom from '../../navigation/TabNavigatorCustom';
+import TextInputCustom from '../../components/TextInputCustom';
+import TextInputCurrency from '../../components/TextInputCurrency';
+
+// Const
+import { validationsTypes } from '../../commons/types/validationTypes';
+import { reqPermissionContact } from '../../core/permission';
+import {
+  apiAddFavoriteSendMoney,
+  apiFavoriteDetails,
+  apiRemoveFavorite,
+} from '../../hooks/api/apiFavorite';
+
+
+
+// Styles
+import globalStyles from '../../styles/globalStyles';
+import style from './style';
+import { theme } from '../../core/theme';
+import {
+  analyticSendMoneyCancel,
+  analyticSendMoneyPay,
+} from '../../core/analytics';
+
+import { sendMoneyToEnrolledAndNonEnrolled } from '../../commons/apiInterface/sendMoneyToEnrolledAndNonEnrolled';
+
+const { white, red } = theme.colors;
+const { validNumber, validLettersExtend } = validationsTypes;
+
+const SendMoneyServices = ({ navigation, route }) => {
+  const { auth, dispatchAuth } = useContext(AuthContext);
+  const { fn } = useContext(FontSizeContext);
+  const { lng } = useContext(LanguageContext);
+  const { personalInfo, credentials } = auth;
+  const [msgMaxAmount, setMsgMaxAmount] = useState('');
+  const [showSendMoney, setShowSendMoney] = useState(false);
+  const [showSuccessfully, setShowSuccessfully] = useState(false);
+  const [showContactBook, setShowContactBook] = useState(false);
+  const [contactPhones, setContactPhones] = useState([]);
+  const [isEditName, setIsEditName] = useState(false);
+  const [loader, setLoader] = useState(false);
+  const [favoriteData, setFavoriteData] = useState({});
+  const [formatValues, setFormatValues] = useState({
+    amountFormat: 'L. 0.00',
+    balanceFormat: 'L. 0.00',
+    chargeFormatOne: 'HNL. 0.00',
+    chargeFormatTwo: 'L. 0.00',
+    totalFormat: 'L. 0.00',
+  });
+  const [values, handleInputChange, setValues, resetValues] = useForm({
+    idTransaction: '',
+    phoneNumber: '',
+    fullName: '',
+    customerCode: '',
+    balance: 0,
+    amount: 0,
+    charge: 0,
+    total: 0,
+    description: '',
+    isIAgree: false,
+    isFavorite: false,
+    Verification_Pending: '',
+  });
+
+  const {
+    idTransaction,
+    phoneNumber,
+    fullName,
+    customerCode,
+    balance,
+    amount,
+    charge,
+    total,
+    description,
+    isIAgree,
+    isFavorite,
+    Verification_Pending
+  } = values;
+  const { balanceFormat, chargeFormatOne } = formatValues;
+
+  useEffect(() => {
+    const msgCurrency = `${lng.alertV_MaxCurrency} ${formatterCURRENCY(15000)}`;
+    setMsgMaxAmount({
+      title: lng.alert_Title,
+      description: msgCurrency,
+    });
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (route.params?.favorite) {
+        searchFavorite(route.params.favorite);
+      } else {
+        getBalance();
+      }
+      const unsuscribe = () => {
+        resetAllValues(false);
+      };
+      return unsuscribe;
+    }, [route.params]),
+  );
+
+  const searchFavorite = async favorite => {
+    setLoader(true);
+    setFavoriteData(favorite);
+    await getBalance();
+    const params = {
+      customerCode: favorite?.CustomerCode,
+      customerPhoneNumber: favorite?.PhoneNumber,
+      type: favorite?.Type,
+      id: favorite?.Id,
+    };
+    const response = await apiFavoriteDetails(params);
+    const { success, message, data } = response;
+    if (!success) {
+      Alert.alert('Error', message);
+    } else {
+      setValues(currentValues => ({
+        ...currentValues,
+        fullName: data[0]?.ReceiverName,
+        customerCode: data[0]?.ReceiverCustomerCode,
+        phoneNumber: data[0]?.ReceiverPhoneNumber,
+        isFavorite: true,
+      }));
+    }
+    setLoader(false);
+  };
+
+  const getBalance = async () => {
+    setLoader(true);
+    const response = await hookBalancePoint(auth, dispatchAuth, lng);
+    const { success, message, data } = response;
+    if (!success) {
+      Alert.alert(lng.alert_Title, `${lng.alertA_GetBalance}:\n${message}`);
+    } else {
+      const { balance, balanceFormat } = data;
+      setFormatValues(currentValues => ({ ...currentValues, balanceFormat }));
+      setValues(currentValues => ({ ...currentValues, balance }));
+    }
+    setLoader(false);
+  };
+
+  const handleCancel = () => {
+    navigation.navigate('Home');
+    analyticSendMoneyCancel();
+  };
+
+  const handleAccept = async () => {
+    if (formValid()) {
+      setLoader(true);
+
+
+      // Section is being rewritten here
+      let params = {
+        amount: amount,
+        comment: description,
+        beneficiaryName: fullName,
+        receiverPhoneNumber: phoneNumber,
+      }
+      const responsee = await sendMoneyToEnrolledAndNonEnrolled(params, lng.locate, lng);
+      const { data, message, success } = responsee;
+      if (success) {
+        const newBalance = balance - data.amount - data.charge;
+        setValues({
+          ...values,
+          fullName: fullName,
+          idTransaction: data.transactionId,
+          charge: data.charge,
+          total: data.total,
+          balance: newBalance,
+        });
+        setFormatValues({
+          ...formatValues,
+          amountFormat: formatterCURRENCY(data.amount),
+          chargeFormatOne: formatterCURRENCY(data.charge, 'HNL'),
+          chargeFormatTwo: formatterCURRENCY(data.charge),
+          totalFormat: formatterCURRENCY(data.total),
+          balanceFormat: formatterCURRENCY(newBalance),
+        });
+        setShowSendMoney(true);
+      } else {
+        Alert.alert(lng.alert_Title, message);
+      }
+
+
+
+
+      setLoader(false);
+    }
+    analyticSendMoneyPay();
+  };
+
+  const formValid = () => {
+    let isValid = true;
+    let msg = '';
+    let fullNameCount = getFullNameArray(fullName);
+    let minAmount = 0.01;
+    let minAmountFormat = formatterCURRENCY(minAmount);
+    if (phoneNumber.length < 8) {
+      msg = msg + lng.alertV_PhoneNumber;
+      isValid = false;
+    }
+    if (fullName.length < 3 || fullNameCount.length < 2) {
+      msg = msg ? `${msg}\n${lng.alertV_Name}` : lng.alertV_Name;
+      isValid = false;
+    }
+    if (amount < minAmount) {
+      msg = msg
+        ? `${msg}\n${lng.alertV_Amount} ${minAmountFormat}`
+        : `${lng.alertV_Amount} ${minAmountFormat}`;
+      isValid = false;
+    }
+    if (amount > balance) {
+      msg = msg
+        ? `${msg}\n${lng.alertV_InsufficientMoney}`
+        : lng.alertV_InsufficientMoney;
+      isValid = false;
+    }
+    msg && Alert.alert(lng.alertV_Title, msg);
+    return isValid;
+  };
+
+  const acceptIsPhoneNumber = async phone => {
+    phone = phone ? phone : phoneNumber;
+    if (phone.length === 8) {
+      const phoneNumberInfo = credentials?.phoneNumber.split('_');
+
+
+      if (phoneNumberInfo != phone) {
+        let params = {
+          phoneNumber: `${phone}`,
+        };
+        setLoader(true);
+        const response = await sendMoneyCheckPhoneNumber(params);
+        let { Status, EnabledEdit, SendMoneyInfo } = response;
+        if (Status) {
+          setValues({
+            ...values,
+            fullName: SendMoneyInfo.nameSendMoney,
+            customerCode: SendMoneyInfo.CustomerCode,
+            phoneNumber: phone,
+            Verification_Pending: SendMoneyInfo.Verification_Pending,
+          });
+          setIsEditName(false);
+        } else {
+          setValues({
+            ...values,
+            fullName: '',
+            customerCode: '',
+            phoneNumber: phone,
+          });
+          EnabledEdit ? setIsEditName(true) : setIsEditName(false);
+        }
+      } else {
+
+        setValues({ ...values, fullName: '', phoneNumber: '' });
+        setIsEditName(false);
+        Alert.alert(lng.alertV_Title, lng.sendMoneySamePhone);
+      }
+      setLoader(false);
+    }
+  };
+
+  const handleDismissSendMoney = () => {
+    resetAllValues();
+  };
+
+  const handleConfirmSendMoney = () => {
+    setShowSendMoney(false);
+    setShowSuccessfully(true);
+  };
+
+  const handleSuccessfully = () => {
+    setShowSuccessfully(false);
+    resetAllValues();
+  };
+
+  const handleGetContact = async () => {
+    if (await reqPermissionContact(lng)) {
+      const response = await selectContact();
+      let phones = [];
+      if (response) {
+        response.phones.map(phone => phones.push(phone.number));
+        phones = filterPhoneNumbers(phones);
+        if (phones.length == 1) {
+          setContactPhones([]);
+          handleSelectContact(phones[0]);
+        } else if (phones.length > 1) {
+          setContactPhones(phones);
+          setShowContactBook(true);
+        } else {
+          setContactPhones([]);
+          setValues({
+            ...values,
+            phoneNumber: '',
+            fullName: '',
+          });
+          Alert.alert(lng.alertV_TitleContact, lng.alertV_ContactBook);
+        }
+      }
+    }
+  };
+
+  const handleSelectContact = phone => {
+    setValues({
+      ...values,
+      phoneNumber: phone,
+    });
+    acceptIsPhoneNumber(phone);
+  };
+
+  const handleFavorite = async favoriteNextState => {
+    const { customerId: senderCustomerCode, personDataLogin } = personalInfo;
+    const { number: senderPhoneNumber } = personDataLogin.phoneDataLogin;
+    let isValid = false;
+    setLoader(true);
+    if (favoriteNextState) {
+      if (formValid()) {
+        const params = {
+          customerCode: senderCustomerCode,
+          customerPhoneNumber: senderPhoneNumber,
+          receiverName: fullName,
+          receiverCustomerCode: customerCode,
+          receiverPhoneNumber: phoneNumber,
+        };
+        const response = await apiAddFavoriteSendMoney(params);
+        const { success, message, data } = response;
+        if (!success) {
+          Alert.alert('Error', message);
+        } else {
+          isValid = true;
+          const newFavorite = {
+            CustomerCode: params.customerCode, // data?.CustomerCode,
+            PhoneNumber: params.customerPhoneNumber, // data?.PhoneNumber,
+            ReceiverName: params.receiverName, // data?.PrimaryKey,
+            ReceiverCustomerCode: params.receiverCustomerCode, // data?.Description,
+            ReceiverPhoneNumber: params.receiverPhoneNumber, // data?.Product_Name,
+            Id: 0, // data?.Id,
+            Type: 'SM', // data?.Type,
+          };
+          setFavoriteData(newFavorite);
+        }
+      }
+    } else {
+      if (Object.keys(favoriteData).length !== 0) {
+        const params = {
+          customerCode: favoriteData?.CustomerCode,
+          customerPhoneNumber: favoriteData?.PhoneNumber,
+          type: 'SM',
+          id: favoriteData.Id,
+        };
+        const response = await apiRemoveFavorite(params);
+        const { success, message } = response;
+        if (!success) {
+          Alert.alert('Error', message);
+        } else {
+          setFavoriteData({});
+          isValid = true;
+        }
+      }
+    }
+    setLoader(false);
+    return isValid;
+  };
+
+  const resetAllValues = (isUpdateBalance = true) => {
+    resetValues();
+    setContactPhones([]);
+    setIsEditName(false);
+    setFavoriteData({});
+    route.params = null;
+    isUpdateBalance && getBalance();
+  };
+
+  const onEditingName = () => {
+    const fullNameFormat = getFullNameFormat(fullName).toUpperCase();
+    setValues({
+      ...values,
+      fullName: fullNameFormat,
+    });
+  };
+
+  return (
+    <View style={[t.flex1, t.bgWhite]}>
+      <SafeAreaView style={[t.flexCol, t.flex1, t.bgWhite]}>
+        
+        <ScrollView style={[t.flex1, style.container]}>
+          <View style={[t.flex1, t.flexRow, t.justifyBetween]}>
+            <View style={[t.justifyCenter, style.title]}>
+              <Text style={[fn.font20_1_3, globalStyles.fontBold]}>
+                {lng.SendMS_Title}
+              </Text>
+            </View>
+            <FavoriteCustom
+              fn={fn}
+              action={handleFavorite}
+              value={isFavorite}
+              targetName={'isFavorite'}
+              onChange={handleInputChange}
+            />
+          </View>
+          <View style={[style.body]}>
+            <Text
+              style={[
+                t.textBlack,
+                t.mT2,
+                t.pT1,
+                t.selfCenter,
+                globalStyles.fontMedium,
+                fn.font36_1_1,
+              ]}>
+              {balanceFormat}
+            </Text>
+            <Text
+              style={[
+                t.selfCenter,
+                t._mT1,
+                globalStyles.fontSemiBold,
+                fn.font20_1_15,
+                globalStyles.darkGrayFontColor,
+              ]}>
+              {lng.lbl_Available}
+            </Text>
+            {/* Form */}
+            <KeyboardAvoidingView
+              style={{ flex: 1 }}
+              keyboardVerticalOffset={64}
+              behavior={Platform.OS === "ios" ? "padding" : null}
+            >
+              <ScrollView showsVerticalScrollIndicator={false}
+                showsHorizontalScrollIndicator={false}>
+                <TextInputCustom
+                  fn={fn}
+                  name={lng.inpP_PhoneNumber}
+                  value={phoneNumber}
+                  targetName={'phoneNumber'}
+                  onChange={handleInputChange}
+                  isRequired
+                  keyboardType={'phone-pad'}
+                  initialNumbers={[3, 7, 8, 9]}
+                  maxLength={8}
+                  validationsTypes={validNumber}
+                  boxZise={'md'}
+                  placeholder={'9999-9999'}
+                  onEndEditing={() => acceptIsPhoneNumber()}
+                  icon={
+                    <TouchableOpacity
+                      style={[t._mL8, t.pR2, t.hFull]}
+                      onPress={handleGetContact}>
+                      <AddContactIcon width={25} height={35} />
+                    </TouchableOpacity>
+                  }
+                />
+                <TextInputCustom
+                  fn={fn}
+                  name={lng.inpT_NameBeneficiary}
+                  value={fullName}
+                  targetName={'fullName'}
+                  onChange={handleInputChange}
+                  onEndEditing={onEditingName}
+                  isRequired
+                  maxLength={50}
+                  validationsTypes={validLettersExtend}
+                  boxZise={'md'}
+                  placeholder={lng.inpP_NameBeneficiary}
+                  editable={isEditName}
+                />
+                <TextInputCurrency
+                  fn={fn}
+                  name={lng.inpT_Amount}
+                  value={amount}
+                  targetName={'amount'}
+                  onChange={handleInputChange}
+                  msgMaxValue={msgMaxAmount}
+                  isRequired
+                  maxValue={15000}
+                  keyboardType={'phone-pad'}
+                  boxZise={'xll'}
+                  placeholder={'L. 0.00'}
+                  textInputStyle={[
+                    t.textCenter,
+                    t.trackingTight,
+                    fn.font40_1_5,
+                    globalStyles.fontMedium,
+                  ]}
+                />
+                <TextInputCustom
+                  fn={fn}
+                  name={lng.inpP_Description}
+                  textOptional={lng.lbl_Optional}
+                  value={description}
+                  targetName={'description'}
+                  onChange={handleInputChange}
+                  maxLength={50}
+                  boxZise={'md'}
+                  placeholder={''}
+                />
+                <Text
+                  style={[
+                    t.mT1,
+                    fn.font12_1_2,
+                    globalStyles.fontMedium,
+                    globalStyles.darkGrayFontColor,
+                  ]}>
+                  <Text>{`${lng.lbl_D_TransactionCharge}:`}</Text>
+                  <Text>{` ${chargeFormatOne}`}</Text>
+                </Text>
+                <View>
+                  <SwitchCustom
+                    fn={fn}
+                    name={lng.swt_IAgree}
+                    isRequired
+                    isEnabled={isIAgree}
+                    targetName={'isIAgree'}
+                    onChange={handleInputChange}
+                  />
+                </View>
+                <View style={[t.flexRow, t.justifyBetween, t.mT4]}>
+                  <ButtonCustom
+                    fn={fn}
+                    containerStyle={{ width: '49%' }}
+                    backgroundColor={red}
+                    color={white}
+                    isElevation
+                    paddingVertical={'md'}
+                    textStyle={[fn.font15_1_5, globalStyles.fontMedium]}
+                    onPress={handleCancel}>
+                    {lng.btn_Cancel}
+                  </ButtonCustom>
+                  <ButtonCustom
+                    fn={fn}
+                    disabled={!isIAgree}
+                    containerStyle={{ width: '49%' }}
+                    isElevation
+                    paddingVertical={'md'}
+                    textStyle={[fn.font15_1_5, globalStyles.fontMedium]}
+                    onPress={handleAccept}>
+                    {lng.btn_Send}
+                  </ButtonCustom>
+                </View>
+              </ScrollView>
+            </KeyboardAvoidingView>
+          </View>
+          {loader && <Loader loader={loader} mode={'modal'} />}
+        </ScrollView>
+      </SafeAreaView>
+      <Portal>
+        <DialogSendMoney
+          fn={fn}
+          auth={auth}
+          lng={lng}
+          action={handleConfirmSendMoney}
+          open={showSendMoney}
+          setOpen={setShowSendMoney}
+          values={{ ...values, ...formatValues }}
+          setValues={setValues}
+          resetValues={resetValues}
+          handleInputChange={handleInputChange}
+          onDismiss={handleDismissSendMoney}
+        />
+        <DialogSuccessfully
+          fn={fn}
+          action={handleSuccessfully}
+          name={lng.SendMM_Successfully}
+          open={showSuccessfully}
+          onDismiss={handleDismissSendMoney}
+          setOpen={setShowSuccessfully}
+        />
+        <DialogContactBook
+          fn={fn}
+          lng={lng}
+          action={handleSelectContact}
+          phones={contactPhones}
+          open={showContactBook}
+          setOpen={setShowContactBook}
+        />
+      </Portal>
+      <TabNavigatorCustom navigation={navigation} />
+    </View>
+  );
+};
+
+export default SendMoneyServices;
