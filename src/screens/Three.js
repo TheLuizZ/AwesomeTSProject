@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Switch, Button, TextInput } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 function Three() {
   const navigation = useNavigation();
@@ -11,11 +11,19 @@ function Three() {
     setIsEnabled((previousState) => !previousState);
   };
 
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('Pase Por el useCallBack Three');
+      setIsEnabled(false); // Restablecer el estado del interruptor
+      setNombre(''); // Limpia el campo de entrada de texto
+    }, [])
+  );
+
   useEffect(() => {
-    console.log('Three Primero');
+    console.log('Three Entro');
     // Este efecto se ejecuta cuando se monta la pantalla
     return () => {
-        console.log('Three Segundo');
+      console.log('Three Salio');
       // Esta función se ejecutará cuando se desmonte la pantalla
       setIsEnabled(false); // Restablece el estado del switch
       setNombre(''); // Limpia el campo de entrada de texto
@@ -29,9 +37,22 @@ function Three() {
     backgroundColor: 'green', // Cambia el color de fondo a verde
   };
 
+  const goToThreeScreen = () => {
+    // Navega a la pantalla Three.js y limpia el historial de navegación
+    // navigation.reset({
+    //   index: 0,
+    //   routes: [{ name: 'Four' }],
+    // });
+    navigation.navigate('Four')
+  };
+
   return (
     <View style={screenStyle}>
-      <Text>Three</Text>
+      <Button
+        title="darle pa tras"
+        onPress={() => navigation.navigate('Other')}
+      />
+      <Text>Bienvenidos</Text>
       <TextInput
         placeholder="Ingresa tu nombre"
         value={nombre}
@@ -46,8 +67,8 @@ function Three() {
       />
       {isEnabled && (
         <Button
-          title="Regresar a la Pantalla Principal"
-          onPress={() => navigation.navigate('Uno')}
+          title="Ir a Otra Pantalla"
+          onPress={goToThreeScreen}
         />
       )}
     </View>

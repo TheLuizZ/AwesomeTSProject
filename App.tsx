@@ -1,34 +1,19 @@
-import React from 'react';
-import {SafeAreaView,} from 'react-native';
-import { OlvidasteTuPIN } from './src/OlvidasteTuPIN/OlvidasteTuPIN';
-import { AdquirirTarjetaFisica } from './src/AdquirirTarjetaFisica/AdquirirTarjetaFisica';
-import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
-
-import Uno from './src/screens/Uno'; // Importa tu pantalla principal
-import OtherScreen from './src/screens/OtherScreen'; // Importa la pantalla a la que quieres navegar
-import Three from './src/screens/Three'; // Importa la pantalla a la que quieres navegar
-
-const Stack = createStackNavigator();
-
-// export const App = () =>{
-//   return(
-//     <SafeAreaView style = {{flex: 1,}}>
-//       {/* <AdquirirTarjetaFisica/> */}
-//       <OlvidasteTuPIN/>
-//     </SafeAreaView>
-//   )
-// }
+import { SafeAreaView } from 'react-native';
+import React, { useEffect } from 'react';
+import Rutas from './src/screens/Rutas';
 
 export const App = () => {
+  useEffect(() => {
+    console.log('App Primero');
+    // Este efecto se ejecuta cuando se monta la pantalla
+    return () => {
+        console.log('App Segundo');
+    };
+  }, []);
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Uno">
-        <Stack.Screen name="Other" component={OtherScreen} />
-        <Stack.Screen name="Uno" component={Uno} />
-        <Stack.Screen name="Three" component={Three} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <SafeAreaView style={{ flex: 1 }}>
+      <Rutas />
+    </SafeAreaView>
   );
 }
 

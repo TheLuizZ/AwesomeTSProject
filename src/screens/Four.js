@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Switch, Button, TextInput } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
-function OtherScreen() {
+function Four() {
   const navigation = useNavigation();
   const [isEnabled, setIsEnabled] = useState(false);
   const [nombre, setNombre] = useState('');
@@ -13,17 +13,17 @@ function OtherScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      console.log('Pase Por el useCallBack Other');
+      console.log('Pase Por el useCallBack Four');
       setIsEnabled(false); // Restablecer el estado del interruptor
       setNombre(''); // Limpia el campo de entrada de texto
     }, [])
   );
 
   useEffect(() => {
-    console.log('Other Entro');
+    console.log('Four Entro');
     // Este efecto se ejecuta cuando se monta la pantalla
     return () => {
-      console.log('Other Salio');
+      console.log('Four Salio');
       // Esta función se ejecutará cuando se desmonte la pantalla
       setIsEnabled(false); // Restablece el estado del switch
       setNombre(''); // Limpia el campo de entrada de texto
@@ -41,13 +41,17 @@ function OtherScreen() {
     // Navega a la pantalla Three.js y limpia el historial de navegación
     // navigation.reset({
     //   index: 0,
-    //   routes: [{ name: 'Three' }],
+    //   routes: [{ name: 'Uno' }],
     // });
-    navigation.navigate('Three')
+    navigation.navigate('Uno')
   };
 
   return (
     <View style={screenStyle}>
+      <Button
+        title="darle pa tras"
+        onPress={() => navigation.navigate('Three')}
+      />
       <Text>Bienvenidos</Text>
       <TextInput
         placeholder="Ingresa tu nombre"
@@ -71,4 +75,4 @@ function OtherScreen() {
   );
 }
 
-export default OtherScreen;
+export default Four;

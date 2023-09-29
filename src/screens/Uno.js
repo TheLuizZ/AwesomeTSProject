@@ -8,10 +8,10 @@ function Uno() {
   const navigation = useNavigation();
 
   useEffect(() => {
-    console.log('Uno Primero');
+    console.log('Uno Entro');
     // Este efecto se ejecuta cuando se monta la pantalla
     return () => {
-        console.log('Uno Segundo');
+        console.log('Uno Salio');
     };
   }, []);
   
