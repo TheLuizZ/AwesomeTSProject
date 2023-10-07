@@ -43,7 +43,10 @@ function Four() {
     //   index: 0,
     //   routes: [{ name: 'Uno' }],
     // });
-    navigation.navigate('Uno')
+    navigation.navigate('SelectCountryScreen')
+  };
+  const GoPdfScreen = () => {
+    navigation.navigate('PDFExample')
   };
 
   return (
@@ -70,7 +73,12 @@ function Four() {
           title="Ir a Otra Pantalla"
           onPress={goToThreeScreen}
         />
+        
       )}
+      <Button
+          title="PdfScreen"
+          onPress={GoPdfScreen}
+        />
     </View>
   );
 }
